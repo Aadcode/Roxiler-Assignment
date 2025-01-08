@@ -1,4 +1,4 @@
-# Full Stack Application Setup Guide
+# Assignment Setup Guide
 
 This guide will help you set up and run both the backend and frontend components of the application.
 
