@@ -1,21 +1,18 @@
-
 import express from "express";
 import {
-  initializeDatabase,
-  listTransactions,
+  initializeDB,
+  getTransactions,
   getStatistics,
-  getBarChartData,
+  getBarChart,
   getPieChartData,
-  getCombinedData,
 } from "../controllers/product.controller.js";
 
 const router = express.Router();
 
-router.get("/initialize", initializeDatabase);
-router.get("/transactions", listTransactions);
+router.get("/initialize", initializeDB);
+router.get("/transactions", getTransactions);
 router.get("/statistics", getStatistics);
-router.get("/bar-chart", getBarChartData);
+router.get("/bar-chart", getBarChart);
 router.get("/pie-chart", getPieChartData);
-router.get("/combined-data", getCombinedData);
 
 export default router;

@@ -2,7 +2,6 @@ import express from "express";
 import dotenv from "dotenv";
 import connectDB from "./db/db.js";
 import cors from "cors";
-
 import transactionRoutes from "./routes/transaction.route.js";
 const app = express();
 dotenv.config();
