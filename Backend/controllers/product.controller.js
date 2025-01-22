@@ -23,10 +23,9 @@ export const initializeDB = async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      "https://s3.amazonaws.com/roxiler.com/product_transaction.json",
-      { timeout: 5000 }
-    );
+    const response = await axios.get(`${process.env.API_URL}`, {
+      timeout: 5000,
+    });
 
     if (!Array.isArray(response.data)) {
       throw new Error("Invalid data format from API");
@@ -253,7 +252,6 @@ export const getBarChart = async (req, res) => {
         .split("-")
         .map((num) => (num === "above" ? Infinity : parseInt(num)));
 
-      // Find matching result by checking if number falls within range
       const found = results.find((r) => {
         const num = parseInt(r.name);
         return num >= start && (end === Infinity ? true : num <= end);
@@ -270,6 +268,7 @@ export const getBarChart = async (req, res) => {
     res.status(200).json({
       success: true,
       data: completeResults,
+      actualresult: results,
       month,
     });
   } catch (error) {

@@ -1,3 +1,4 @@
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -14,12 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-import apiClient from "../utils";
-import { InputWithButton } from "./InputwithButtons";
 import { Button } from "./ui/button";
 import { Chart } from "./ui/barChart";
-import { useEffect, useState } from "react";
+import { InputWithButton } from "./ui/InputwithButtons";
+import { useToast } from "@/hooks/use-toast";
+import apiClient from "../utils";
 
 interface Transaction {
   _id: string;
@@ -30,18 +30,18 @@ interface Transaction {
   category: string;
   image: string;
   sold: boolean;
-  dateOfSale: string; // ISO string
+  dateOfSale: string;
   __v: number;
 }
 
-interface pagination {
+interface Pagination {
   total: number;
   page: number;
   per_page: number;
   total_pages: number;
 }
 
-interface statisticsInterface {
+interface Statistics {
   soldItemsCount: number;
   notSoldItemsCount: number;
   totalItems: number;
@@ -51,104 +51,161 @@ interface statisticsInterface {
 const Dashboard = () => {
   const [month, setMonth] = useState<string>("March");
   const [search, setSearch] = useState<string>("");
-  const [statistics, setstatistics] = useState<statisticsInterface>();
+  const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [page, setPage] = useState<number>(1);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [pagination, setpagination] = useState<pagination>();
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [error, setError] = useState<string>("");
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const { toast } = useToast();
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [transactionsRes, statisticsRes] = await Promise.all([
+        apiClient.get("/transactions", {
+          params: { month, search, page },
+        }),
+        apiClient.get("/statistics", {
+          params: { month },
+        }),
+      ]);
+
+      setTransactions(transactionsRes.data.data || []);
+      setPagination(transactionsRes.data.pagination);
+      setStatistics(statisticsRes.data.data);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "An error occurred while fetching data";
+      setError(errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, month, search, page]);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true);
-      try {
-        const transactions = await apiClient.get("/transactions", {
-          params: { month, search, page },
-        });
-        setTransactions(transactions.data.data || []);
-        setpagination(transactions.data.pagination);
-        const statisticsResponse = await apiClient("/statistics", {
-          params: { month },
-        });
-        setstatistics(statisticsResponse.data.data);
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTransactions();
-  }, [month, search, page]);
+    fetchData();
+  }, [fetchData]);
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
+  const handleInitialize = async () => {
+    try {
+      const response = await apiClient.get("/initialize");
+      setIsInitialized(true);
+      toast({
+        title: "Success",
+        description: response.data.message,
+      });
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to initialize database";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
+  const renderStatisticsCard = (label: string, value: number | string) => (
+    <div className="flex flex-col md:flex-row md:justify-between md:items-center">
+      <span className="font-bold text-lg md:text-xl">{label}</span>
+      <span className="text-lg">{value}</span>
+    </div>
+  );
+
   return (
-    <div className="p-2 bg-black text-white">
-      <div className="flex justify-between p-5">
-        <div>
+    <div className="p-2 md:p-4 lg:p-6 bg-black text-white min-h-screen">
+      {/* Controls Section */}
+      <div className="flex flex-col md:flex-row justify-between gap-4 p-2 md:p-5">
+        <Button onClick={handleInitialize} disabled={isInitialized}>
+          {isInitialized ? "Database Initialized" : "Initialize Database"}
+        </Button>
+        <div className="w-full md:w-auto">
           <InputWithButton
             placeholder="Search Transactions"
             type="text"
-            onchange={handleSearch}
+            onchange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setSearch(e.target.value)
+            }
           />
         </div>
-        <div>
-          <Select onValueChange={(value) => setMonth(value)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="March" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month) => (
-                <SelectItem key={month} value={month}>
-                  {month}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Select onValueChange={setMonth} defaultValue="March">
+          <SelectTrigger className="w-full md:w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {months.map((m) => (
+              <SelectItem key={m} value={m}>
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <div className="p-5 m-5 border border-white">
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-4 mb-4 text-red-500 bg-red-100 rounded">{error}</div>
+      )}
+
+      {/* Transactions Table */}
+      <div className="p-2 md:p-5 m-2 md:m-5 border border-white overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Sold</TableHead>
-              <TableHead>Image</TableHead>
+              <TableHead className="min-w-[50px]">ID</TableHead>
+              <TableHead className="min-w-[120px]">Title</TableHead>
+              <TableHead className="min-w-[200px]">Description</TableHead>
+              <TableHead className="min-w-[80px]">Price</TableHead>
+              <TableHead className="min-w-[100px]">Category</TableHead>
+              <TableHead className="min-w-[60px]">Sold</TableHead>
+              <TableHead className="min-w-[80px]">Image</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center">
-                  Loading...
+                <TableCell colSpan={7} className="text-center py-8">
+                  <div className="flex items-center justify-center">
+                    Loading transactions...
+                  </div>
                 </TableCell>
               </TableRow>
             ) : transactions.length > 0 ? (
               transactions.map((transaction) => (
                 <TableRow key={transaction.id}>
                   <TableCell>{transaction.id}</TableCell>
-                  <TableCell>{transaction.title}</TableCell>
-                  <TableCell>{transaction.description}</TableCell>
-                  <TableCell>${transaction.price}</TableCell>
+                  <TableCell className="break-words">
+                    {transaction.title}
+                  </TableCell>
+                  <TableCell className="break-words">
+                    {transaction.description}
+                  </TableCell>
+                  <TableCell>${transaction.price.toFixed(2)}</TableCell>
                   <TableCell>{transaction.category}</TableCell>
                   <TableCell>{transaction.sold ? "Yes" : "No"}</TableCell>
                   <TableCell>
                     <img
                       src={transaction.image}
-                      alt="Product"
-                      className="w-10 h-10 object-cover"
+                      alt={transaction.title}
+                      className="w-10 h-10 object-cover rounded"
                     />
                   </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center">
+                <TableCell colSpan={7} className="text-center py-8">
                   No transactions found.
                 </TableCell>
               </TableRow>
@@ -156,50 +213,65 @@ const Dashboard = () => {
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between p-5 px-10 ">
-        <div className="text-center font-medium">Page No: {page}</div>
-        <div className="flex gap-5">
-          <Button
-            onClick={() => setPage((page) => page - 1)}
-            disabled={page === 1}
-          >
-            Previous
-          </Button>
-          <Button
-            onClick={() => setPage((page) => page + 1)}
-            disabled={page === pagination?.total_pages}
-          >
-            Next
-          </Button>
-        </div>
-        <div className="text-center font-medium">Per Page: 10</div>
-      </div>
 
-      <div className="flex flex-col w-1/2 mx-auto mt-10">
-        <div className="flex justify-between p-5">
-          <div className="text-2xl font-semibold">Statistics</div>
-        </div>
-        <div className="flex flex-col mx-auto p-5 gap-2 rounded-md bg-yellow-200 w-full text-black">
-          <div>
-            <span className="font-bold text-xl">Total Sales</span>:{" "}
-            <span className="text-lg ">{statistics?.totalRevenue}</span>
+      {/* Pagination */}
+      {pagination && (
+        <div className="flex flex-col md:flex-row items-center justify-between p-2 md:p-5 gap-4">
+          <div className="text-center font-medium">
+            Page {page} of {pagination.total_pages}
           </div>
-          <div>
-            <span className="font-bold text-xl">Total Sold Item</span> :
-            <span className="text-lg "> {statistics?.soldItemsCount}</span>
+          <div className="flex gap-2 md:gap-5">
+            <Button
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 1 || loading}
+            >
+              Previous
+            </Button>
+            <Button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page === pagination.total_pages || loading}
+            >
+              Next
+            </Button>
           </div>
-          <div className="text-xl">
-            <span className="font-bold text-xl">Total Not Sold Item</span> :{" "}
-            <span className="text-lg ">{statistics?.notSoldItemsCount}</span>
+          <div className="text-center font-medium">
+            Showing {pagination.per_page} items per page
           </div>
         </div>
-      </div>
-      <div className="mt-10 mb-16 w-3/4 mx-auto p-10">
-        <div className="flex justify-between mb-16">
-          <div className="text-2xl font-semibold">Statistics</div>
+      )}
+
+      {/* Statistics Cards */}
+      {statistics && (
+        <div className="flex flex-col w-full lg:w-2/3 mx-auto mt-10 px-2">
+          <div className="flex justify-between p-2 md:p-5">
+            <div className="text-xl md:text-2xl font-semibold">Statistics</div>
+          </div>
+          <div className="flex flex-col mx-auto p-4 md:p-5 gap-2 rounded-md bg-yellow-200 w-full text-black">
+            {renderStatisticsCard(
+              "Total Sales",
+              `$${statistics.totalRevenue.toFixed(2)}`
+            )}
+            {renderStatisticsCard(
+              "Total Sold Items",
+              statistics.soldItemsCount
+            )}
+            {renderStatisticsCard(
+              "Total Not Sold Items",
+              statistics.notSoldItemsCount
+            )}
+          </div>
         </div>
-        <div>
-          <Chart selectedMonth={month}></Chart>
+      )}
+
+      {/* Chart Section */}
+      <div className="mt-10 mb-16 w-full lg:w-3/4 mx-auto p-4 md:p-10">
+        <div className="flex justify-between mb-8 md:mb-16">
+          <div className="text-xl md:text-2xl font-semibold">
+            Monthly Trends
+          </div>
+        </div>
+        <div className="w-full overflow-x-auto">
+          <Chart selectedMonth={month} />
         </div>
       </div>
     </div>
